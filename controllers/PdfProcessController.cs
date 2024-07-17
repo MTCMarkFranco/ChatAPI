@@ -22,7 +22,7 @@ namespace PdfProcessingApi.Controllers
 
         public PdfProcessController(IConfiguration configuration)
         {
-            string serviceName = "ww-proto-search"; // replace with your search service name
+            string serviceName = "acsgroundedsearch"; // replace with your search service name
             //string indexName = "YourIndexName"; // replace with your index name
             string searchApiKey = configuration.GetValue<string>("SearchApiKey"); // replace with your search service api key
             string openAiApiKey = configuration.GetValue<string>("OpenAiApiKey"); // replace with your search service api key
@@ -32,7 +32,7 @@ namespace PdfProcessingApi.Controllers
 
             // Initialize OpenAI client
             var credential = new AzureKeyCredential(openAiApiKey);
-            _openAIClient = new OpenAIClient(new Uri("https://ww-proto-openai.openai.azure.com"), credential);
+            _openAIClient = new OpenAIClient(new Uri("https://openaidevdemo.openai.azure.com"), credential);
         }
 
         [HttpPost]
