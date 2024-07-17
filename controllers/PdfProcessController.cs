@@ -61,7 +61,7 @@ namespace PdfProcessingApi.Controllers
                         {
                             var documentKeyPairs = new Dictionary<string, object>();
 
-                            string id = formFile.Name;
+                            string id = formFile.FileName.Replace(" ","").Replace(".","");
                             string title = formFile.FileName;
                             string content = await reader.ReadToEndAsync();
 
@@ -155,7 +155,7 @@ namespace PdfProcessingApi.Controllers
 
         private static async Task<IReadOnlyList<float>> GenerateEmbeddings(string text, OpenAIClient openAIClient)
         {
-            var response = await openAIClient.GetEmbeddingsAsync("embedding", new EmbeddingsOptions(text));
+            var response = await openAIClient.GetEmbeddingsAsync("text-embedding-ada-002", new EmbeddingsOptions(text));
 
             return response.Value.Data[0].Embedding;
         }

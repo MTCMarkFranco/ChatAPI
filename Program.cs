@@ -30,18 +30,18 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
-app.MapPost("/ProcessPdf", static async (HttpRequest request, PdfProcessController controller) =>
-{
+// app.MapPost("/ProcessPdf", static async (HttpRequest request, PdfProcessController controller) =>
+// {
    
-    var form = await request.ReadFormAsync();
-    var files = form.Files; // This is where the files are accessed
+//     var form = await request.ReadFormAsync();
+//     var files = form.Files; // This is where the files are accessed
 
-    await controller.UploadPdfFiles(form);
+//     await controller.UploadPdfFiles(form);
     
-})
-.WithName("ProcessPdf")
-.WithFormOptions()
-.WithOpenApi();
+// })
+// .WithName("ProcessPdf")
+// .WithFormOptions()
+// .WithOpenApi();
 
 app.Run();
 
