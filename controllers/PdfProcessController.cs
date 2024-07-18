@@ -7,6 +7,7 @@ using Azure.Search.Documents.Indexes.Models;
 using Azure.Search.Documents.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.SemanticKernel.Text;
 
 namespace PdfProcessingApi.Controllers
 {
@@ -37,7 +38,7 @@ namespace PdfProcessingApi.Controllers
 
         [HttpPost]
         [Consumes("multipart/form-data")]
-        public async Task<IActionResult> UploadPdfFiles([FromForm] IFormCollection form)
+        public Task<IActionResult> UploadPdfFiles([FromForm] IFormCollection form)
         {
             // Setup index for RFP.
             var indexName = Guid.NewGuid().ToString();
@@ -55,23 +56,36 @@ namespace PdfProcessingApi.Controllers
                 {
                     try
                     {
-                        // Upload file to blob storage
+                        // 1. Chnk the File Using SK
+                        #pragma warning disable SKEXP0050 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
+                        using (var reader = new StreamReader(formFile.OpenReadStream()))
+                        {
+                            var content = reader.ReadToEnd();
+                            // load the content into a pdf reader
+                            
+                            var paragraphs = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+                            var chunks = TextChunker.SplitPlainTextParagraphs(paragraphs, 2000, 200);
+                        }
+                        #pragma warning restore SKEXP0050 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
+
+                        // 2. vectorize Chunks
+
+                        // 3. populate index
+
+                        // reutn an IActionResult of Ok here
+                        return Task.FromResult<IActionResult>(Ok());
+
                     }
                     catch (Exception ex)
                     {
-                        throw;
+                           throw;                 
                     }
+                    
                 }
             }
 
-            // 2. Create an Indexer to extract text from PDFs
-            CreateIndexerAsync("acsgroundedsearch", this._searchCredential, "YourBlobConnectionString", "YourBlobContainerName").Wait();
+            return Task.FromResult<IActionResult>(StatusCode(500, "Something Happemed"));
 
-            // 3. Run the indexer
-
-            // 4. Call Semantic Kernel Planner and Execute the Plan
-
-            
         }
 
         internal static SearchIndex GetSampleIndex(string name)
@@ -129,175 +143,6 @@ namespace PdfProcessingApi.Controllers
             return searchIndex;
         }
 
-        private async Task CreateIndexerAsync(string searchServiceName, AzureKeyCredential credential, string blobConnectionString, string blobContainerName)
-        {
-            // Create a SearchIndexClient to send create/update index commands
-            Uri serviceEndpoint = new Uri($"https://{searchServiceName}.search.windows.net/");
-            SearchIndexerClient indexerClient = new SearchIndexerClient(serviceEndpoint, credential);  
-
-            var skillset = new SearchIndexerSkillset(  
-            name: "rfp-skills-definition-skillset",  
-            skills: new List<SearchIndexerSkill>  
-            {  
-               new OcrSkill(
-                    inputs: new List<InputFieldMappingEntry>()
-                    {
-                        new InputFieldMappingEntry(name: "image")
-                        {
-                            Source = "/document/normalized_images/*"
-                        }
-                    },
-                    outputs: new List<OutputFieldMappingEntry>()
-                    {
-                        new OutputFieldMappingEntry(name: "text")
-                        {
-                            TargetName = "text"
-                        }
-                    })
-                    {       
-                    Name = "image",
-                    Description = "Extracts text (plain and structured) from image.",
-                    Context = "/document/normalized_images/*",
-                    },  
-                new MergeSkill(  
-                    inputs: new List<InputFieldMappingEntry>  
-                    {  
-                        new InputFieldMappingEntry(name: "text")
-                        { 
-                            Source = "/document/content"
-                        },  
-                        new InputFieldMappingEntry(name: "itemsToInsert")
-                        {
-                            Source = "/document/normalized_images/*/text"
-                        }, 
-                        new InputFieldMappingEntry(name: "offsets")
-                        {
-                            Source = "/document/normalized_images/*/contentOffset"
-                        }  
-                    },  
-                    outputs: new List<OutputFieldMappingEntry>  
-                    {  
-                        new OutputFieldMappingEntry(name: "mergedText")
-                        {
-                            TargetName = "mergedText"
-                        }  
-                    })  
-                {  
-                    Name = "#2",  
-                    Context = "/document",  
-                    InsertPreTag = " ",  
-                    InsertPostTag = " "  
-                },  
-                new SplitSkill(  
-                    inputs: new List<InputFieldMappingEntry>  
-                    {  
-                        new InputFieldMappingEntry(name: "text")
-                        {
-                            Source = "/document/mergedText"
-                        }
-                    },  
-                    outputs: new List<OutputFieldMappingEntry>  
-                    {  
-                        new OutputFieldMappingEntry(name: "textItems")
-                        {
-                            TargetName = "pages"
-                        }
-                    })  
-                {  
-                    Name = "#3",  
-                    Context = "/document",  
-                    DefaultLanguageCode = SplitSkillLanguage.En,  
-                    TextSplitMode = TextSplitMode.Pages,  
-                    MaximumPageLength = 2000,  
-                },  
-                new AzureOpenAIEmbeddingSkill(  
-                    inputs: new List<InputFieldMappingEntry>  
-                    {  
-                        new InputFieldMappingEntry(name: "text")
-                        {
-
-                        Source = "/document/pages/*"
-                        } 
-                    },  
-                    outputs: new List<OutputFieldMappingEntry>  
-                    {  
-                        new OutputFieldMappingEntry(name: "embedding")
-                        {
-                            TargetName = "text_vector"
-                        }
-                    }  
-                    )  
-                {  
-                    Name = "#4",  
-                    Description = null,  
-                    Context = "/document/pages/*",  
-                    ResourceUri = new Uri("https://openaidevdemo.openai.azure.com"),
-                    ApiKey = "<redacted>",
-                    DeploymentId = "text-embedding-ada-002",
-                    Dimensions = 1536,
-                    ModelName = "text-embedding-ada-002",
-                    AuthIdentity = null,
-                    
-                },  
-                new VisionVectorizeSkill (  
-                    inputs: new List<InputFieldMappingEntry>  
-                    {  
-                        new InputFieldMappingEntry(name: "image")
-                        {
-                            Source = "/document/normalized_images/*"
-                        }
-                    },  
-                    outputs: new List<OutputFieldMappingEntry>  
-                    {  
-                        new OutputFieldMappingEntry(name: "vector")
-                        {
-                            TargetName = "image_vector"
-                        }
-                    },
-                    modelVersion: "2023-04-15")  
-                    {  
-                        Name = "#5",  
-                        Description = "An AI Services Vision vectorization skill for images",  
-                        Context = "/document/normalized_images/*"
-                        
-                    } 
-            })  
-        {  
-            Description = "Skillset to chunk documents and generate embeddings",  
-            
-        };  
-  
-        indexerClient.CreateOrUpdateSkillset(skillset);  
-  
-        // Now Create the Indexer utilizing the SkillSet
-        
-        var indexer = new SearchIndexer(  
-            name: "rfp-indexer",  
-            dataSourceName: "<your-data-source-name>",  
-            targetIndexName: "rfp-skills-definition"
-            
-        );  
-
-            
-        var parameters = new IndexingParameters();
-
-        parameters.IndexingParametersConfiguration = new IndexingParametersConfiguration()
-        {
-            
-        };
-
-        
-
-
-        indexer.FieldMappings.Add(new FieldMapping("text_vector") { TargetFieldName = "text_vector" });
-        indexer.FieldMappings.Add(new FieldMapping("chunk") { TargetFieldName = "chunk" });
-        indexer.FieldMappings.Add(new FieldMapping("metadata_storage_path") { TargetFieldName = "metadata_storage_path" });
-        indexer.FieldMappings.Add(new FieldMapping("title") { TargetFieldName = "title" });
-
-        // Create or update the indexer in Azure Cognitive Search
-        await indexerClient.CreateOrUpdateIndexerAsync(indexer);
-
-        }
 
        private static async Task<IReadOnlyList<float>> GenerateEmbeddings(string text, OpenAIClient openAIClient)
         {
